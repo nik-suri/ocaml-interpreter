@@ -43,7 +43,7 @@ module Env : Env_type =
 
     (* Creates a closure from an expression and the environment it's
        defined in *)
-    let rec close (exp : expr) (env : env) : value =
+    let close (exp : expr) (env : env) : value =
       Closure (exp, env)
     ;;
 
@@ -105,7 +105,7 @@ let rec eval_s (exp : expr) _env : expr =
                       | Bool b -> raise (EvalError ("cannot negate bool " ^
                                                               string_of_bool b))
                       | _ -> raise (EvalError
-                        (exp_to_string exp ^ " cannot be negateds")))
+                        (exp_to_string exp ^ " cannot be negated")))
   | Binop (op, e1, e2) ->
     (match eval_s e1 _env, eval_s e2 _env with
      | Num n, Num m -> (match op with
@@ -129,7 +129,7 @@ let rec eval_s (exp : expr) _env : expr =
   | Fun (id, e) -> Fun (id, e)
   | Let (id, e1, e2) -> eval_s (subst id e1 e2) _env
   | Letrec (id, e1, e2) ->
-    eval_s (subst id (subst id (Letrec (id, e1, exp)) e1) e2) _env
+    eval_s (subst id (subst id (Letrec (id, e1, Var id)) e1) e2) _env
   | App (e1, e2) ->
     (match eval_s e1 _env with
      | Fun (id, e) -> eval_s (subst id e2 e) _env
@@ -140,13 +140,14 @@ let rec eval_d (exp : expr) (env : Env.env) : expr =
   match exp with
   | Num _ | Bool _ -> exp
   | Var id -> (match Env.lookup env id with
-               | Val e -> e
+               | Val e -> (* Printf.printf "%s" (Env.env_to_string env); *) e
                | Closure (e, _) -> e)
   | Raise -> raise EvalException
   | Unassigned -> raise (EvalError "unassigned variable")
   | Unop (_op, e) -> (match eval_d e env with
                       | Num n -> Num (-n)
-                      | Bool b -> raise (EvalError "can't negate bool")
+                      | Bool b -> raise (EvalError ("can't negate bool " ^
+                                                              string_of_bool b))
                       | Var id -> raise (EvalError ("unbound variable " ^ id))
                       | _ -> raise (EvalError "cannot be negated"))
   | Binop (op, e1, e2) ->
@@ -169,7 +170,7 @@ let rec eval_d (exp : expr) (env : Env.env) : expr =
      | Bool true -> eval_d e2 env
      | Bool false -> eval_d e3 env
      | _ -> raise (EvalError (exp_to_string exp ^ " type error")))
-  | Fun (id, e) -> Fun (id, e)
+  | Fun (id, e) -> (* Printf.printf "%s" (Env.env_to_string env); *) Fun (id, e)
   | Let (id, e1, e2) ->
     eval_d e2 (Env.extend env id (ref (Env.Val ((eval_d e1 env)))))
   | Letrec (id, e1, e2) ->
@@ -180,6 +181,7 @@ let rec eval_d (exp : expr) (env : Env.env) : expr =
   | App (e1, e2) ->
     (match eval_d e1 env with
      | Fun (id, e) ->
+       (* Printf.printf "%s" (Env.env_to_string env); *)
        eval_d e (Env.extend env id (ref (Env.Val ((eval_d e2 env)))))
      | _ -> raise (EvalError "argument is not a function - cannot be applied"))
 ;;

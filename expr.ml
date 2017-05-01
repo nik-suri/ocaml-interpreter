@@ -102,10 +102,10 @@ let rec subst (var_name : varid) (repl : expr) (exp : expr) : expr =
     else Let (id, subst var_name repl e1, subst var_name repl e2)
   | Letrec (id, e1, e2) ->
     if id = var_name
-      then Letrec (id, subst var_name repl e1, subst var_name repl e2)
+      then Letrec (id, subst var_name repl e1, e2)
     else if SS.mem id (free_vars repl)
-      then Let (new_varname (), subst var_name repl e1, subst var_name repl e2)
-    else Let (id, subst var_name repl e1, subst var_name repl e2)
+      then Letrec (new_varname (), subst var_name repl e1, subst var_name repl e2)
+    else Letrec (id, subst var_name repl e1, subst var_name repl e2)
 ;;
 
 
