@@ -91,101 +91,171 @@ module Env : Env_type =
     the substitution model version or the dynamic or lexical
     environment model version. *)
 
-let eval_t exp _env = exp ;;
+let eval_t exp _env : Env.value = Val exp ;;
 
-let rec eval_s (exp : expr) _env : expr =
+let rec eval_s (exp : expr) _env : Env.value =
   match exp with
-  | Num _ | Bool _ -> exp
+  | Num _ | Bool _ -> Val exp
   | Var id -> raise (EvalError ("unbound variable " ^ id))
   | Raise -> raise EvalException
   | Unassigned -> raise (EvalError "unassigned variable")
-  | Unop (_op, e) -> (match eval_s e _env with
-                      | Num n -> Num (-n)
-                      | Var id -> raise (EvalError ("unbound variable " ^ id))
-                      | Bool b -> raise (EvalError ("cannot negate bool " ^
-                                                              string_of_bool b))
-                      | _ -> raise (EvalError
-                        (exp_to_string exp ^ " cannot be negated")))
+  | Unop (_op, e) ->
+    (match eval_s e _env with
+     | Val e' | Closure (e', _) ->
+       (match e' with
+        | Num n -> Val (Num (-n))
+        | Var id -> raise (EvalError ("unbound variable " ^ id))
+        | Bool b -> raise (EvalError ("cannot negate bool " ^ string_of_bool b))
+        | _ -> raise (EvalError (exp_to_string exp ^ " cannot be negated"))))
   | Binop (op, e1, e2) ->
     (match eval_s e1 _env, eval_s e2 _env with
-     | Num n, Num m -> (match op with
-                        | Plus -> Num (n + m)
-                        | Minus -> Num (n - m)
-                        | Times -> Num (n * m)
-                        | Equals -> Bool (n = m)
-                        | LessThan -> Bool (n < m))
-     | Var id, _ -> raise (EvalError ("unbound variable " ^ id))
-     | Bool a, Bool b -> (match op with
-                          | Plus | Minus | Times -> raise (EvalError
-                           (exp_to_string exp ^ " wrong type for operation"))
-                          | Equals -> Bool (a = b)
-                          | LessThan -> Bool (a < b))
-     | _ -> raise (EvalError (exp_to_string exp ^ "  error")))
+     | Val e1', Val e2' | Val e1', Closure (e2', _) | Closure (e1', _), Val e2'
+     | Closure (e1', _), Closure (e2', _) ->
+       (match e1', e2' with
+        | Num n, Num m -> (match op with
+                           | Plus -> Val (Num (n + m))
+                           | Minus -> Val (Num (n - m))
+                           | Times -> Val (Num (n * m))
+                           | Equals -> Val (Bool (n = m))
+                           | LessThan -> Val (Bool (n < m)))
+        | Var id, _ -> raise (EvalError ("unbound variable " ^ id))
+        | Bool a, Bool b -> (match op with
+                             | Plus | Minus | Times -> raise (EvalError
+                              (exp_to_string exp ^ " wrong type for operation"))
+                             | Equals -> Val (Bool (a = b))
+                             | LessThan -> Val (Bool (a < b)))
+        | _ -> raise (EvalError (exp_to_string exp ^ "  error"))))
   | Conditional (e1, e2, e3) ->
     (match eval_s e1 _env with
-     | Bool true -> eval_s e2 _env
-     | Bool false -> eval_s e3 _env
-     | _ -> raise (EvalError (exp_to_string exp ^ " type error")))
-  | Fun (id, e) -> Fun (id, e)
+     | Val e | Closure (e, _) ->
+       (match e with
+        | Bool true -> eval_s e2 _env
+        | Bool false -> eval_s e3 _env
+        | _ -> raise (EvalError (exp_to_string exp ^ " type error"))))
+  | Fun (id, e) -> Val (Fun (id, e))
   | Let (id, e1, e2) -> eval_s (subst id e1 e2) _env
   | Letrec (id, e1, e2) ->
     eval_s (subst id (subst id (Letrec (id, e1, Var id)) e1) e2) _env
   | App (e1, e2) ->
     (match eval_s e1 _env with
-     | Fun (id, e) -> eval_s (subst id e2 e) _env
-     | _ -> raise (EvalError (exp_to_string exp ^ " bad redex")))
+     | Val e' | Closure (e', _) ->
+       (match e' with
+        | Fun (id, e) -> eval_s (subst id e2 e) _env
+        | _ -> raise (EvalError (exp_to_string exp ^ " bad redex"))))
 ;;
 
-let rec eval_d (exp : expr) (env : Env.env) : expr =
+let rec eval_d (exp : expr) (env : Env.env) : Env.value =
   match exp with
-  | Num _ | Bool _ -> exp
-  | Var id -> (match Env.lookup env id with
-               | Val e -> (* Printf.printf "%s" (Env.env_to_string env); *) e
-               | Closure (e, _) -> e)
+  | Num _ | Bool _ -> Val exp
+  | Var id -> Env.lookup env id
   | Raise -> raise EvalException
   | Unassigned -> raise (EvalError "unassigned variable")
-  | Unop (_op, e) -> (match eval_d e env with
-                      | Num n -> Num (-n)
-                      | Bool b -> raise (EvalError ("can't negate bool " ^
-                                                              string_of_bool b))
-                      | Var id -> raise (EvalError ("unbound variable " ^ id))
-                      | _ -> raise (EvalError "cannot be negated"))
+  | Unop (_op, e) ->
+    (match eval_d e env with
+     | Val e' | Closure (e', _) ->
+       (match e' with
+        | Num n -> Val (Num (-n))
+        | Bool b -> raise (EvalError ("can't negate bool " ^ string_of_bool b))
+        | Var id -> raise (EvalError ("unbound variable " ^ id))
+        | _ -> raise (EvalError "cannot be negated")))
   | Binop (op, e1, e2) ->
     (match eval_d e1 env, eval_d e2 env with
-     | Num n, Num m -> (match op with
-                        | Plus -> Num (n + m)
-                        | Minus -> Num (n - m)
-                        | Times -> Num (n * m)
-                        | Equals -> Bool (n = m)
-                        | LessThan -> Bool (n < m))
-     | Var id, _ -> raise (EvalError ("unbound variable " ^ id))
-     | Bool a, Bool b -> (match op with
-                          | Plus | Minus | Times -> raise (EvalError
-                           (exp_to_string exp ^ " wrong type for operation"))
-                          | Equals -> Bool (a = b)
-                          | LessThan -> Bool (a < b))
-     | _ -> raise (EvalError (exp_to_string exp ^ " error")))
+     | Val e1', Val e2' | Val e1', Closure (e2', _) | Closure (e1', _), Val e2'
+     | Closure (e1', _), Closure (e2', _) ->
+       (match e1', e2' with
+        | Num n, Num m -> (match op with
+                           | Plus -> Val (Num (n + m))
+                           | Minus -> Val (Num (n - m))
+                           | Times -> Val (Num (n * m))
+                           | Equals -> Val (Bool (n = m))
+                           | LessThan -> Val (Bool (n < m)))
+        | Var id, _ -> raise (EvalError ("unbound variable " ^ id))
+        | Bool a, Bool b -> (match op with
+                             | Plus | Minus | Times -> raise (EvalError
+                              (exp_to_string exp ^ " wrong type for operation"))
+                             | Equals -> Val (Bool (a = b))
+                             | LessThan -> Val (Bool (a < b)))
+        | _ -> raise (EvalError (exp_to_string exp ^ " error"))))
   | Conditional (e1, e2, e3) ->
     (match eval_d e1 env with
-     | Bool true -> eval_d e2 env
-     | Bool false -> eval_d e3 env
-     | _ -> raise (EvalError (exp_to_string exp ^ " type error")))
-  | Fun (id, e) -> (* Printf.printf "%s" (Env.env_to_string env); *) Fun (id, e)
+     | Val e | Closure (e, _) ->
+       (match e with
+        | Bool true -> eval_d e2 env
+        | Bool false -> eval_d e3 env
+        | _ -> raise (EvalError (exp_to_string exp ^ " type error"))))
+  | Fun (id, e) -> Val (Fun (id, e))
   | Let (id, e1, e2) ->
-    eval_d e2 (Env.extend env id (ref (Env.Val ((eval_d e1 env)))))
+    eval_d e2 (Env.extend env id (ref ((eval_d e1 env))))
   | Letrec (id, e1, e2) ->
     let temp_val = ref (Env.Val Unassigned) in
     let env_n = Env.extend env id temp_val in
-    temp_val := Env.Val (eval_d e1 env_n);
+    temp_val := eval_d e1 env_n;
     eval_d e2 env_n
   | App (e1, e2) ->
     (match eval_d e1 env with
-     | Fun (id, e) ->
-       (* Printf.printf "%s" (Env.env_to_string env); *)
-       eval_d e (Env.extend env id (ref (Env.Val ((eval_d e2 env)))))
-     | _ -> raise (EvalError "argument is not a function - cannot be applied"))
+     | Val e' | Closure (e', _) ->
+       (match e' with
+        | Fun (id, e) ->
+          eval_d e (Env.extend env id (ref ((eval_d e2 env))))
+        | _ ->
+          raise (EvalError "argument is not a function - cannot be applied")))
 ;;
 
-let eval_l _ = failwith "eval_l not implemented" ;;
+let rec eval_l (exp : expr) (env : Env.env) : Env.value =
+  match exp with
+  | Num _ | Bool _ -> Env.close exp env
+  | Var id -> Env.lookup env id
+  | Raise -> raise EvalException
+  | Unassigned -> raise (EvalError "unassigned variable")
+  | Unop (_op, e) ->
+    (match eval_l e env with
+     | Val e' | Closure (e', _) ->
+       (match e' with
+        | Num n -> Env.close (Num (-n)) env
+        | Bool b -> raise (EvalError ("can't negate bool " ^ string_of_bool b))
+        | Var id -> raise (EvalError ("unbound variable " ^ id))
+        | _ -> raise (EvalError "cannot be negated")))
+  | Binop (op, e1, e2) ->
+    (match eval_l e1 env, eval_l e2 env with
+     | Val e1', Val e2' | Val e1', Closure (e2', _) | Closure (e1', _), Val e2'
+     | Closure (e1', _), Closure (e2', _) ->
+       (match e1', e2' with
+        | Num n, Num m -> (match op with
+                           | Plus -> Env.close (Num (n + m)) env
+                           | Minus -> Env.close (Num (n - m)) env
+                           | Times -> Env.close (Num (n * m)) env
+                           | Equals -> Env.close (Bool (n = m)) env
+                           | LessThan -> Env.close (Bool (n < m)) env)
+        | Var id, _ -> raise (EvalError ("unbound variable " ^ id))
+        | Bool a, Bool b -> (match op with
+                             | Plus | Minus | Times -> raise (EvalError
+                              (exp_to_string exp ^ " wrong type for operation"))
+                             | Equals -> Env.close (Bool (a = b)) env
+                             | LessThan -> Env.close (Bool (a < b)) env)
+        | _ -> raise (EvalError (exp_to_string exp ^ " error"))))
+  | Conditional (e1, e2, e3) ->
+    (match eval_l e1 env with
+     | Val e | Closure (e, _) ->
+       (match e with
+        | Bool true -> eval_l e2 env
+        | Bool false -> eval_l e3 env
+        | _ -> raise (EvalError (exp_to_string exp ^ " type error"))))
+  | Fun (id, e) -> Env.close (Fun (id, e)) env
+  | Let (id, e1, e2) ->
+    eval_l e2 (Env.extend env id (ref ((eval_l e1 env))))
+  | Letrec (id, e1, e2) ->
+    let temp_val = ref (Env.Val Unassigned) in
+    let env_n = Env.extend env id temp_val in
+    temp_val := eval_l e1 env_n;
+    eval_l e2 env_n
+  | App (e1, e2) ->
+    (match eval_l e1 env with
+     | Val e' | Closure (e', _) ->
+       (match e' with
+        | Fun (id, e) ->
+          eval_l e (Env.extend env id (ref ((eval_l e2 env))))
+        | _ ->
+          raise (EvalError "argument is not a function - cannot be applied")))
+;;
 
-let evaluate = eval_d ;;
+let evaluate = eval_l ;;
