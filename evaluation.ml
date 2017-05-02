@@ -197,8 +197,8 @@ let rec eval_d (exp : expr) (env : Env.env) : Env.value =
        (match e' with
         | Fun (id, e) ->
           eval_d e (Env.extend env id (ref ((eval_d e2 env))))
-        | _ ->
-          raise (EvalError "argument is not a function - cannot be applied")))
+        | _ -> raise (EvalError ("argument" ^
+          exp_to_string e1 ^ "is not a function - cannot be applied"))))
 ;;
 
 let rec eval_l (exp : expr) (env : Env.env) : Env.value =
@@ -250,10 +250,11 @@ let rec eval_l (exp : expr) (env : Env.env) : Env.value =
     eval_l e2 env_n
   | App (e1, e2) ->
     (match eval_l e1 env with
-     | Val e' | Closure (e', _) ->
+     | Val _ -> raise (EvalError "unclosed environment")
+     | Closure (e', env') ->
        (match e' with
         | Fun (id, e) ->
-          eval_l e (Env.extend env id (ref ((eval_l e2 env))))
+          eval_l e (Env.extend env' id (ref ((eval_l e2 env'))))
         | _ ->
           raise (EvalError "argument is not a function - cannot be applied")))
 ;;
