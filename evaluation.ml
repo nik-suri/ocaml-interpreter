@@ -259,4 +259,4 @@ let rec eval_l (exp : expr) (env : Env.env) : Env.value =
           raise (EvalError "argument is not a function - cannot be applied")))
 ;;
 
-let evaluate = eval_l ;;
+let evaluate = eval_d ;;
