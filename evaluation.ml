@@ -57,7 +57,7 @@ module Env : Env_type =
     (* Returns a new environment just like env except that it maps the
        variable varid to loc *)
     let extend (env : env) (varname : varid) (loc : value ref) : env =
-      (varname, loc) :: env
+      (varname, loc) :: (List.remove_assoc varname env)
     ;;
 
     (* Returns a printable string representation of an environment *)
@@ -65,12 +65,13 @@ module Env : Env_type =
       let value_to_string ?(printenvp : bool = true) (v : value) : string =
         match v with
         | Val e -> exp_to_string e
-        | Closure (e, env) -> if printenvp
-                                then exp_to_string e ^ ", " ^ env_to_string env
-                              else exp_to_string e in
+        | Closure (e, env) ->
+          if printenvp
+            then "(" ^ exp_to_string e ^ ", [" ^ env_to_string env ^ "])"
+          else exp_to_string e in
       match env with
       | [] -> ""
-      | h::t -> (fst h) ^ " = " ^ (value_to_string !(snd h)) ^ ", " ^
+      | h::t -> (fst h) ^ " = " ^ (value_to_string !(snd h)) ^ "; " ^
                 env_to_string t
     ;;
 
@@ -80,9 +81,10 @@ module Env : Env_type =
     let value_to_string ?(printenvp : bool = true) (v : value) : string =
       match v with
       | Val e -> exp_to_string e
-      | Closure (e, env) -> if printenvp
-                              then exp_to_string e ^ ", " ^ env_to_string env
-                            else exp_to_string e
+      | Closure (e, env) ->
+        if printenvp
+          then "(" ^ exp_to_string e ^ ", [" ^ env_to_string env ^ "])"
+        else exp_to_string e
     ;;
 
   end

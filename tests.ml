@@ -7,7 +7,8 @@ let v2e (v : Env.value) : Expr.expr =
   | Env.Val e | Env.Closure (e, _) -> e
 ;;
 
-let test_exp_to_abstract_string () =
+let test_to_strings () =
+  (* exp_to_abstract_string tests *)
   assert (exp_to_abstract_string (Num 3) = "Num(3)");
   assert (exp_to_abstract_string (Var "x") = "Var(x)");
   assert (exp_to_abstract_string (Bool true) = "Bool(true)");
@@ -31,7 +32,15 @@ let test_exp_to_abstract_string () =
     "App(Var(f), Num(4)))");
   assert (exp_to_abstract_string
     (App(Fun("x", Binop(Plus, Var("x"), Var("x"))), Num(5))) =
-    "App(Fun(x, Binop(Plus, Var(x), Var(x))), Num(5))")
+    "App(Fun(x, Binop(Plus, Var(x), Var(x))), Num(5))");
+
+  (* value_to_string/env_to_string tests (can be tested together because
+     value_to_string calls env_to_string in the place of a closure) *)
+  assert (Env.value_to_string (Env.Val (Num(5))) = "5");
+  assert (Env.value_to_string (Env.Val (Binop(Plus,Var("x"),Num(4)))) = "x + 4");
+  assert (Env.value_to_string (eval_l (str_to_exp "let f = 3 in x + 3 ;;") (Env.create ())) = "(6, [f = (3, []); ])");
+  assert (Env.value_to_string (eval_l (str_to_exp "let y = 3 in let f = fun x -> x + y in f 3 ;;") (Env.create ())) = "(6, [x = (3, [f = ( fun x -> x + y, [y = (3, []); ]); y = (3, []); ]); y = (3, []); ])")
+  (* assert (Env.value_to_string (eval_l (str_to_exp "") )) *)
 ;;
 
 let test_free_vars () =
@@ -57,15 +66,18 @@ let test_subst () =
 
 let test_closure () =
   let env = Env.create () in
-  assert (Env.close (Num(3)) (Env.create()) = Closure(Num(3), env));
+  assert (Env.close (Num(3)) (Env.create()) = Env.Closure(Num(3), env));
 ;;
 
-let test_lookup () =
-
-;;
-
-let test_extend () =
-
+(* Uses Env.extend to avoid raising errors (looking up a variable in an empty
+  environment *)
+let test_lookup_extend () =
+  let env = Env.extend (Env.create ()) "x" (ref (Env.Val (Num(3)))) in
+  assert ((Env.lookup env "x") = Env.Val (Num(3)));
+  let env1 = Env.extend env "y" (ref (Env.Val (Binop(Plus,Num(3),Num(4))))) in
+  assert ((Env.lookup env1 "y") = Env.Val (Binop(Plus,Num(3),Num(4))));
+  let env2 = Env.extend env1 "f" (ref (Env.Val (str_to_exp "fun x -> x * 10 ;;"))) in
+  assert ((Env.lookup env2 "f") = Env.Val (str_to_exp "fun x -> x * 10 ;;"))
 ;;
 
 let test_eval_sl (eval : Expr.expr -> Env.env -> Env.value) () =
@@ -75,6 +87,7 @@ let test_eval_sl (eval : Expr.expr -> Env.env -> Env.value) () =
   assert (v2e (eval (str_to_exp "let f = fun x -> x in f (f 3) ;;") (Env.create ())) = Num(3));
   assert (v2e (eval (str_to_exp "let f = fun x -> x + 1 in f ;;") (Env.create ())) = (str_to_exp "fun x -> x + 1 ;;"));
   assert (v2e (eval (str_to_exp "let f = fun y -> y + 5 in let y = 3 in let x = fun z -> z + y in f (x 5) ;;") (Env.create ())) = Num(13));
+  assert (v2e (eval (str_to_exp "let f = fun x -> fun y -> x + y in (f 10) 5 ;;") (Env.create ())) = Num(15));
   assert (v2e (eval (str_to_exp "let x = 1 in let f = fun y -> x + y in let x = 2 in f 3 ;;") (Env.create ())) = Num(4));
   assert (v2e (eval (str_to_exp "let x = 0 in let f = fun y -> x in let x = 42 in f 42 ;;") (Env.create ())) = Num(0));
   assert (v2e (eval (str_to_exp "let f = 3 in let y = 4 in let z = 6 in let x = fun x -> fun y -> fun z -> x + y + z in (((x f) y) z) ;;") (Env.create())) = Num(13));
@@ -98,9 +111,11 @@ let test_eval_d () =
 ;;
 
 let run_tests =
-  test_exp_to_abstract_string ();
+  test_to_strings ();
   test_free_vars ();
   test_subst ();
+  test_closure ();
+  test_lookup_extend ();
   test_eval_sl eval_s ();
   test_eval_d ();
   test_eval_sl eval_l ();
