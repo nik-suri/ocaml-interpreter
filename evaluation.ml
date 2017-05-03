@@ -216,7 +216,7 @@ let rec eval_l (exp : expr) (env : Env.env) : Env.value =
   | Unassigned -> raise (EvalError "unassigned variable")
   | Unop (_op, e) ->
     (match eval_l e env with
-     | Val _ | Closure (e', _) ->
+     | Val e' | Closure (e', _) ->
        (match e' with
         | Num n -> Env.close (Num (-n)) env
         | Bool b -> raise (EvalError ("can't negate bool " ^ string_of_bool b))
