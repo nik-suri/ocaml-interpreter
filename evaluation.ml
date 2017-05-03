@@ -60,22 +60,29 @@ module Env : Env_type =
       (varname, loc) :: env
     ;;
 
+    (* Returns a printable string representation of an environment *)
+    let rec env_to_string (env : env) : string =
+      let value_to_string ?(printenvp : bool = true) (v : value) : string =
+        match v with
+        | Val e -> exp_to_string e
+        | Closure (e, env) -> if printenvp
+                                then exp_to_string e ^ ", " ^ env_to_string env
+                              else exp_to_string e in
+      match env with
+      | [] -> ""
+      | h::t -> (fst h) ^ " = " ^ (value_to_string !(snd h)) ^ ", " ^
+                env_to_string t
+    ;;
+
     (* Returns a printable string representation of a value; the flag
        printenvp determines whether to include the environment in the
        string representation when called on a closure *)
     let value_to_string ?(printenvp : bool = true) (v : value) : string =
       match v with
       | Val e -> exp_to_string e
-      | Closure (e, env) -> if printenvp then exp_to_string e ^ ", "
+      | Closure (e, env) -> if printenvp
+                              then exp_to_string e ^ ", " ^ env_to_string env
                             else exp_to_string e
-    ;;
-
-   (* Returns a printable string representation of an environment *)
-   let rec env_to_string (env : env) : string =
-      match env with
-      | [] -> ""
-      | h::t -> (fst h) ^ " = " ^ (value_to_string !(snd h)) ^ ", " ^
-                env_to_string t
     ;;
 
   end
@@ -160,9 +167,8 @@ let rec eval_d (exp : expr) (env : Env.env) : Env.value =
         | _ -> raise (EvalError "cannot be negated")))
   | Binop (op, e1, e2) ->
     (match eval_d e1 env, eval_d e2 env with
-     | Val e1', Val e2' | Val e1', Closure (e2', _) | Closure (e1', _), Val e2'
-     | Closure (e1', _), Closure (e2', _) ->
-       (match e1', e2' with
+      | Val e1', Val e2' ->
+        (match e1', e2' with
         | Num n, Num m -> (match op with
                            | Plus -> Val (Num (n + m))
                            | Minus -> Val (Num (n - m))
@@ -175,7 +181,8 @@ let rec eval_d (exp : expr) (env : Env.env) : Env.value =
                               (exp_to_string exp ^ " wrong type for operation"))
                              | Equals -> Val (Bool (a = b))
                              | LessThan -> Val (Bool (a < b)))
-        | _ -> raise (EvalError (exp_to_string exp ^ " error"))))
+        | _ -> raise (EvalError (exp_to_string exp ^ " error")))
+      | _ -> raise (EvalError "no closures in dynamic scoping"))
   | Conditional (e1, e2, e3) ->
     (match eval_d e1 env with
      | Val e | Closure (e, _) ->
@@ -209,7 +216,7 @@ let rec eval_l (exp : expr) (env : Env.env) : Env.value =
   | Unassigned -> raise (EvalError "unassigned variable")
   | Unop (_op, e) ->
     (match eval_l e env with
-     | Val e' | Closure (e', _) ->
+     | Val _ | Closure (e', _) ->
        (match e' with
         | Num n -> Env.close (Num (-n)) env
         | Bool b -> raise (EvalError ("can't negate bool " ^ string_of_bool b))
@@ -217,9 +224,8 @@ let rec eval_l (exp : expr) (env : Env.env) : Env.value =
         | _ -> raise (EvalError "cannot be negated")))
   | Binop (op, e1, e2) ->
     (match eval_l e1 env, eval_l e2 env with
-     | Val e1', Val e2' | Val e1', Closure (e2', _) | Closure (e1', _), Val e2'
-     | Closure (e1', _), Closure (e2', _) ->
-       (match e1', e2' with
+      | Closure (e1', _), Closure (e2', _) ->
+        (match e1', e2' with
         | Num n, Num m -> (match op with
                            | Plus -> Env.close (Num (n + m)) env
                            | Minus -> Env.close (Num (n - m)) env
@@ -232,13 +238,15 @@ let rec eval_l (exp : expr) (env : Env.env) : Env.value =
                               (exp_to_string exp ^ " wrong type for operation"))
                              | Equals -> Env.close (Bool (a = b)) env
                              | LessThan -> Env.close (Bool (a < b)) env)
-        | _ -> raise (EvalError (exp_to_string exp ^ " error"))))
+        | _ -> raise (EvalError (exp_to_string exp ^ " error")))
+      | _ -> raise (EvalError "unclosed environment"))
   | Conditional (e1, e2, e3) ->
     (match eval_l e1 env with
-     | Val e | Closure (e, _) ->
+     | Val _ -> raise (EvalError "unclosed environment")
+     | Closure (e, env') ->
        (match e with
-        | Bool true -> eval_l e2 env
-        | Bool false -> eval_l e3 env
+        | Bool true -> eval_l e2 env'
+        | Bool false -> eval_l e3 env'
         | _ -> raise (EvalError (exp_to_string exp ^ " type error"))))
   | Fun (id, e) -> Env.close (Fun (id, e)) env
   | Let (id, e1, e2) ->
@@ -254,9 +262,9 @@ let rec eval_l (exp : expr) (env : Env.env) : Env.value =
      | Closure (e', env') ->
        (match e' with
         | Fun (id, e) ->
-          eval_l e (Env.extend env' id (ref ((eval_l e2 env'))))
+          eval_l e (Env.extend env' id (ref ((eval_l e2 env))))
         | _ ->
           raise (EvalError "argument is not a function - cannot be applied")))
 ;;
 
-let evaluate = eval_d ;;
+let evaluate = eval_l ;;
