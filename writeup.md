@@ -18,10 +18,11 @@ match exp with
 ```
 
 I modified my function application implementation for the lexical environment by
-following the guidance given in the final project PDF. I extend the environment
-contained in the Closure of the evaluation of the body to include the evaluation
-of the application in the overarching environment. This supports multiple
-function applications, for example, f (f (f 5)).
+following the guidance given in the final project PDF. For function application,
+I extend the environment contained in the Closure of the evaluation of the body
+to include the evaluation of what the function is applied to in the overarching
+environment. This supports multiple function applications, for example,
+f (f (f 5)).
 
 ```ocaml
 | App (e1, e2) ->
@@ -37,9 +38,9 @@ function applications, for example, f (f (f 5)).
 
 One aspect of my match statements in eval_l that is different from my match
 statements in eval\_d is how I separate the Val and Closure match. In eval_d,
-only the overarching environment ever matters. I never deal with a Closure. So,
-whether I run into a Val or Closure does not matter. I only want to extract an
-expression. Thus I match as follows:
+I only want to evaluate inside of the overarching environment. I never deal with
+a Closure. So, whether I run into a Val or Closure does not matter.
+I only want to extract an expression. Thus I match as follows:
 
 ```ocaml
 (match eval_l e1 env with
@@ -49,15 +50,47 @@ expression. Thus I match as follows:
 
 In my match statements in eval_l, I separate the Val and Closure statements
 because in many cases I want to extract the current environment as well as the
-expression to pass into a recursive call. I know that I will never run into a
-Val statement while evaluating eval_l, so if I somehow run into a Val statement
-I simply raise an evaluation error. The only times I don't need to worry about
-the closure environment are when I run into binary or unary operators. The
-only expressions related to these operators can be Nums because all other
-expressions should have already been bound and evaluated to their values. So,
-after performing these operations on their expressions, there is no new binding
-that I have to create. Thus, I can just close them within the overarching
-environment.
+expression to pass both into a recursive call. I cannot match Val and Closure in
+the same statement because the environment within the Closure that I recursively
+pass would need to be present on both sides of the match statement. Also, I know
+that I will never run into a Val statement while evaluating eval_l, so if I
+somehow run into a Val statement I simply raise an evaluation error. The only
+times I don't need to worry about the closure environment are when I run into
+binary or unary operators. The only expressions related to these operators can
+be Nums because all other expressions should have already been bound and
+evaluated to their values. So, after performing these operations on their
+expressions, there is no new binding that I have to create. Thus, I can just
+close them within the overarching environment. I match these as follows:
+
+```ocaml
+  | Unop (_op, e) ->
+    (match eval_l e env with
+     | Val e' | Closure (e', _) ->
+       (match e' with
+        | Num n -> Env.close (Num (-n)) env
+        | Bool b -> raise (EvalError ("can't negate bool " ^ string_of_bool b))
+        | Var id -> raise (EvalError ("unbound variable " ^ id))
+        | _ -> raise (EvalError "cannot be negated")))
+  | Binop (op, e1, e2) ->
+    (match eval_l e1 env, eval_l e2 env with
+      | Closure (e1', _), Closure (e2', _) ->
+        (match e1', e2' with
+        | Num n, Num m -> (match op with
+                           | Plus -> Env.close (Num (n + m)) env
+                           | Minus -> Env.close (Num (n - m)) env
+                           | Times -> Env.close (Num (n * m)) env
+                           | Equals -> Env.close (Bool (n = m)) env
+                           | LessThan -> Env.close (Bool (n < m)) env)
+        | Var id, _ -> raise (EvalError ("unbound variable " ^ id))
+        | Bool a, Bool b -> (match op with
+                             | Plus | Minus | Times -> raise (EvalError
+                              (exp_to_string exp ^ " wrong type for operation"))
+                             | Equals -> Env.close (Bool (a = b)) env
+                             | LessThan -> Env.close (Bool (a < b)) env)
+        | _ -> raise (EvalError (exp_to_string exp ^ " error")))
+      | _ -> raise (EvalError "unclosed environment"))
+```
+
 
 In testing, I was able to test my lexical scoping and substitution evaluator
 using the same evaluation test function. Since lexical scoping and substitution

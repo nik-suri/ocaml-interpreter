@@ -55,6 +55,19 @@ let test_subst () =
   assert (subst "y" (Num(5)) (str_to_exp "let rec f = fun n -> if n = 0 then y else n * f (n - 1) in f 5 ;;") = (str_to_exp "let rec f = fun n -> if n = 0 then 5 else n * f (n - 1) in f 5 ;;"))
 ;;
 
+let test_closure () =
+  let env = Env.create () in
+  assert (Env.close (Num(3)) (Env.create()) = Closure(Num(3), env));
+;;
+
+let test_lookup () =
+
+;;
+
+let test_extend () =
+
+;;
+
 let test_eval_sl (eval : Expr.expr -> Env.env -> Env.value) () =
   assert (v2e (eval (str_to_exp "4 + 5 ;;") (Env.create ())) = Num(9));
   assert (v2e (eval (str_to_exp "~(~(~5)) ;;") (Env.create ())) = Num(-5));
