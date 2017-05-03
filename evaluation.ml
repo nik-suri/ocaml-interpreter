@@ -69,10 +69,9 @@ module Env : Env_type =
           if printenvp
             then "(" ^ exp_to_string e ^ ", [" ^ env_to_string env ^ "])"
           else exp_to_string e in
-      match env with
-      | [] -> ""
-      | h::t -> (fst h) ^ " = " ^ (value_to_string !(snd h)) ^ "; " ^
-                env_to_string t
+      List.fold_right
+        (fun el acc ->
+          (fst el) ^ " = " ^ (value_to_string !(snd el)) ^ "; " ^ acc) env ""
     ;;
 
     (* Returns a printable string representation of a value; the flag
