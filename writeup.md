@@ -1,4 +1,4 @@
-##Extension Writeup - Lexical Scoping
+##Nikhil Suri's Extension Writeup - Lexical Scoping
 
 The extension that I implemented was the lexically scoped evaluator. In order to
 implement this, I used much of the code from my eval_d (dynamically scoped
