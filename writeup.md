@@ -31,7 +31,7 @@ f (f (f 5)).
      | Closure (e', env') ->
        (match e' with
         | Fun (id, e) ->
-          eval\_l e (Env.extend env' id (ref ((eval_l e2 env))))
+          eval_l e (Env.extend env' id (ref ((eval_l e2 env))))
         | _ ->
           raise (EvalError "argument is not a function - cannot be applied")))
 ```
@@ -105,7 +105,7 @@ let v2e (v : Env.value) : Expr.expr =
   | Env.Val e | Env.Closure (e, _) -> e
 ;;
 
-let test\_eval_sl (eval : Expr.expr -> Env.env -> Env.value) () =
+let test_eval_sl (eval : Expr.expr -> Env.env -> Env.value) () =
   ...
 ;;
 ```
