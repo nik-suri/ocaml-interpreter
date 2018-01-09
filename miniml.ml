@@ -39,7 +39,7 @@ let repl () =
         (* evaluate it *)
         let res = Ev.evaluate exp env in
         (* print the result *)
-        printf "==> %s\n" (Ev.Env.value_to_string ~printenvp:true res)
+        printf "==> %s\n" (Ev.Env.value_to_string ~printenvp:false res)
       with
       | Parsing.Parse_error -> printf "xx> parse error\n"
       | Ev.EvalError msg -> printf "xx> evaluation error: %s\n" msg
